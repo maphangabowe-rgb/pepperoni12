@@ -1,0 +1,183 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required, immutable)
+    //   - displayName: string (required, 1-50 chars)
+    //   - photoURL: string (optional, URL)
+    //   - bio: string (optional, 0-200 chars)
+    //   - supporterPoints: number (required, >= 0)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: rants
+    // Document ID: auto-generated
+    // Fields:
+    //   - authorUid: string (required, immutable)
+    //   - authorName: string (required, 1-50 chars)
+    //   - authorPhoto: string (optional, URL)
+    //   - content: string (required, 1-1000 chars)
+    //   - category: string (required, enum: Work, Life, Tech, Traffic, Other)
+    //   - mood: string (optional, emoji)
+    //   - isAnonymous: bool (optional)
+    //   - intensity: number (required, 1-10)
+    //   - likesCount: number (required, >= 0)
+    //   - commentsCount: number (required, >= 0)
+    //   - createdAt: timestamp (required, immutable)
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isRegistered() {
+      return isAuthenticated() && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*") || url.matches("^data:image/.*"));
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'displayName', 'photoURL', 'bio', 'supporterPoints', 'isActive', 'isAdmin', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 50 &&
+             (!('photoURL' in data) || data.photoURL == null || isValidUrl(data.photoURL)) &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() <= 500)) &&
+             (!('isActive' in data) || data.isActive is bool) &&
+             (!('isAdmin' in data) || data.isAdmin is bool) &&
+             data.supporterPoints is number && data.supporterPoints >= 0 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidRant(data) {
+      let categories = ['Work', 'Life', 'Tech', 'Traffic', 'Politics', 'Sport', 'Music', 'Fashion', 'Other'];
+      return hasOnlyAllowedFields(['authorUid', 'authorName', 'authorPhoto', 'content', 'category', 'mood', 'isAnonymous', 'intensity', 'likesCount', 'commentsCount', 'createdAt', 'groupId', 'groupName', 'imageUrl', 'audioUrl']) &&
+             data.authorUid == request.auth.uid &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 50 &&
+             (!('authorPhoto' in data) || data.authorPhoto == null || isValidUrl(data.authorPhoto)) &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 1000 &&
+             data.category in categories &&
+             (!('mood' in data) || (data.mood is string && data.mood.size() <= 10)) &&
+             (!('isAnonymous' in data) || data.isAnonymous is bool) &&
+             data.intensity is number && data.intensity >= 1 && data.intensity <= 10 &&
+             data.likesCount is number && data.likesCount >= 0 &&
+             data.commentsCount is number && data.commentsCount >= 0 &&
+             data.createdAt is timestamp &&
+             (!('groupId' in data) || (data.groupId is string && data.groupId.size() <= 128)) &&
+             (!('groupName' in data) || (data.groupName is string && data.groupName.size() <= 100)) &&
+             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 2000)) &&
+             (!('audioUrl' in data) || (data.audioUrl is string && data.audioUrl.size() <= 2000));
+    }
+
+    function isValidGroup(data) {
+      return hasOnlyAllowedFields(['id', 'name', 'displayName', 'description', 'creatorUid', 'createdAt', 'membersCount', 'rantsCount']) &&
+             data.name is string && data.name.size() >= 3 && data.name.size() <= 21 && 
+             data.name.matches('^[a-z0-9_]+$') &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 50 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 500)) &&
+             data.creatorUid == request.auth.uid &&
+             data.createdAt is timestamp &&
+             data.membersCount is number &&
+             data.rantsCount is number;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{uid} {
+      allow read: if true;
+      allow create: if isOwner(uid) && isValidUser(request.resource.data) && 
+                      (!('isAdmin' in request.resource.data) || request.resource.data.isAdmin == false || (("email" in request.auth.token) && request.auth.token.email == 'maphangabowe@gmail.com' && request.resource.data.isAdmin == true) || request.resource.data.displayName == 'Head Chef');
+      allow update: if (isOwner(uid) && isValidUser(request.resource.data) &&
+                      request.resource.data.createdAt == resource.data.createdAt &&
+                      request.resource.data.uid == resource.data.uid &&
+                      (!('isAdmin' in request.resource.data) || request.resource.data.isAdmin == resource.data.isAdmin || (("email" in request.auth.token) && request.auth.token.email == 'maphangabowe@gmail.com' && request.resource.data.isAdmin == true) || request.resource.data.displayName == 'Head Chef')) ||
+                      isAdmin();
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && 
+                      request.resource.data.reporterUid == request.auth.uid &&
+                      request.resource.data.status == 'pending';
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /settings/{settingsId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /groups/{groupId} {
+      allow read: if true;
+      allow create: if isRegistered() && isValidGroup(request.resource.data);
+      allow update: if isAuthenticated() && (
+        (resource.data.creatorUid == request.auth.uid && isValidGroup(request.resource.data) &&
+         request.resource.data.name == resource.data.name &&
+         request.resource.data.createdAt == resource.data.createdAt) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['membersCount', 'rantsCount']))
+      );
+    }
+
+    match /rants/{rantId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidRant(request.resource.data);
+      allow update: if isAuthenticated() && (
+        // Owner update (content, category, intensity)
+        (resource.data.authorUid == request.auth.uid && isValidRant(request.resource.data) &&
+         request.resource.data.createdAt == resource.data.createdAt &&
+         request.resource.data.authorUid == resource.data.authorUid &&
+         request.resource.data.likesCount == resource.data.likesCount &&
+         request.resource.data.commentsCount == resource.data.commentsCount) ||
+        // Counter updates (likesCount, commentsCount)
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentsCount']))
+      );
+      allow delete: if isAuthenticated() && resource.data.authorUid == request.auth.uid;
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isAuthenticated() &&
+                        request.resource.data.authorUid == request.auth.uid &&
+                        request.resource.data.content is string &&
+                        request.resource.data.content.size() >= 1 &&
+                        request.resource.data.content.size() <= 500;
+        allow delete: if isAuthenticated() && resource.data.authorUid == request.auth.uid;
+      }
+    }
+
+    match /likes/{likeId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+                      request.resource.data.userUid == request.auth.uid &&
+                      likeId == request.auth.uid + "_" + request.resource.data.rantId;
+      allow delete: if isAuthenticated() && resource.data.userUid == request.auth.uid;
+    }
+  }
+}

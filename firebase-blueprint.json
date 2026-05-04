@@ -1,0 +1,139 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Public user profile information.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "User's display name" },
+        "photoURL": { "type": "string", "description": "User's profile picture URL" },
+        "bio": { "type": "string", "description": "Short user bio" },
+        "isActive": { "type": "boolean", "description": "Whether the account is active or deactivated" },
+        "isAdmin": { "type": "boolean", "description": "Owner privileges" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" }
+      },
+      "required": ["uid", "displayName", "createdAt"]
+    },
+    "Report": {
+      "title": "User Report",
+      "description": "Reports of offensive content.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "reporterUid": { "type": "string" },
+        "targetUid": { "type": "string" },
+        "contentId": { "type": "string" },
+        "contentType": { "type": "string", "enum": ["rant", "comment"] },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "resolved"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "reporterUid", "targetUid", "contentId", "contentType", "reason", "createdAt"]
+    },
+    "Settings": {
+      "title": "Site Settings",
+      "description": "Global configuration for the application.",
+      "type": "object",
+      "properties": {
+        "headerCode": { "type": "string" },
+        "footerCode": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Rant": {
+      "title": "User Rant",
+      "description": "A frustration shared by a user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "content": { "type": "string", "description": "The main text of the rant" },
+        "category": { "type": "string", "enum": ["Work", "Life", "Tech", "Traffic", "Politics", "Sport", "Music", "Fashion", "Other"] },
+        "intensity": { "type": "number", "description": "1-10 scale of frustration" },
+        "likesCount": { "type": "number", "description": "Number of 'I feel you' reactions" },
+        "commentsCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "groupId": { "type": "string", "description": "Optional group ID this rant belongs to" },
+        "groupName": { "type": "string", "description": "Optional group name for display" },
+        "imageUrl": { "type": "string", "description": "Optional attached image URL" },
+        "audioUrl": { "type": "string", "description": "Optional attached audio URL" }
+      },
+      "required": ["authorUid", "content", "category", "intensity", "createdAt"]
+    },
+    "Group": {
+      "title": "Community Group",
+      "description": "A user-created group for specific types of rants.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "description": "Unique slug for the group" },
+        "displayName": { "type": "string" },
+        "description": { "type": "string" },
+        "creatorUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "membersCount": { "type": "number" },
+        "rantsCount": { "type": "number" }
+      },
+      "required": ["name", "displayName", "creatorUid", "createdAt"]
+    },
+    "Comment": {
+      "title": "Rant Comment",
+      "description": "A supportive or relatable comment on a rant.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "rantId": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["rantId", "authorUid", "content", "createdAt"]
+    },
+    "Like": {
+      "title": "Rant Like",
+      "description": "A record of a user liking a rant.",
+      "type": "object",
+      "properties": {
+        "rantId": { "type": "string" },
+        "userUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["rantId", "userUid", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "/rants/{rantId}": {
+      "schema": "Rant",
+      "description": "Main collection of rants"
+    },
+    "/rants/{rantId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Comments on a specific rant"
+    },
+    "/likes/{likeId}": {
+      "schema": "Like",
+      "description": "Tracking likes to prevent duplicates (ID: userUid_rantId)"
+    },
+    "/groups/{groupId}": {
+      "schema": "Group",
+      "description": "Collection of user-created communities"
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "Admin collection for content reports"
+    },
+    "/settings/{settingsId}": {
+      "schema": "Settings",
+      "description": "Global application configuration"
+    }
+  }
+}
